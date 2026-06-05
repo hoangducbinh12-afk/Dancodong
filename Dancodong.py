@@ -6,22 +6,22 @@ import easyocr
 from PIL import Image
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Matrix V9.6.5 - Ultimate Clean Mobile", layout="wide")
+st.set_page_config(page_title="Matrix V9.7.5 - Emoji Sniper", layout="wide")
 TOTAL_POS = 107 
 
-# Custom CSS tối giản, giảm cỡ chữ vừa vặn Mobile chống che màn hình
+# Custom CSS tối giản cho Mobile, chống tràn dòng
 st.markdown("""
     <style>
     .main { background-color: #0A0D14; padding: 10px; }
     .stButton>button { width: 100%; border-radius: 6px; height: 3.5em; background-color: #161B26; color: #F0F4F8; border: 1px solid #2D3748; font-weight: bold; }
     .stButton>button:hover { border-color: #FFD700; color: #FFD700; }
     
-    /* Thiết kế hộp chứa nhỏ gọn, sang trọng */
+    /* Thiết kế hộp chứa số nhỏ gọn, sang trọng */
     .mobile-box-bt { background-color: #05070B; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #EF4444; margin-bottom: 12px; overflow: hidden; box-shadow: 0px 4px 15px rgba(239,68,68,0.2); }
     .mobile-box-3 { background-color: #030508; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #2563EB; margin-bottom: 12px; overflow: hidden; }
     .mobile-box-4 { background-color: #030508; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #D97706; margin-bottom: 15px; overflow: hidden; }
     
-    /* Kích thước chữ tỷ lệ vàng Mobile không bị rớt dòng */
+    /* Cỡ chữ tỷ lệ vàng Mobile vừa khít màn hình */
     .mobile-text-bt { color: #FF1E27 !important; font-size: 11vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 2px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     .mobile-text-3 { color: #FF1E27 !important; font-size: 8.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     .mobile-text-4 { color: #FFD700 !important; font-size: 6.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
@@ -85,7 +85,7 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
         num = current_digits[r] + current_digits[c]
         mapping_1d[num] += 1
 
-    # 1. Bộ lọc tỷ lệ % đứt gãy lịch sử
+    # Lọc tỷ lệ đứt gãy lịch sử
     break_arr = np.array(db["break_matrix"])
     max_reached_arr = np.array(db["max_reached_matrix"])
     over_1d_arr = np.array(db["over_1d_matrix"])
@@ -103,7 +103,7 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
     for r, c in top_20_dead_wires:
         dead_wire_blacklist.add(current_digits[r] + current_digits[c])
 
-    # 2. Bộ lọc cầu sập hầm
+    # Lọc cầu sập hầm
     deep_break_arr = np.array(db["deep_break_matrix"])
     deep_break_blacklist = set()
     for r in range(TOTAL_POS):
@@ -111,7 +111,7 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
             if deep_break_arr[r][c] >= 2:
                 deep_break_blacklist.add(current_digits[r] + current_digits[c])
 
-    # 3. Bộ lọc chặn dây thông >= 5đ
+    # Lọc chặn dây thông >= 5đ
     high_level_blacklist = set()
     max_s = int(new_wire_scores.max())
     if max_s >= 5:
@@ -120,14 +120,14 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
             for r, c in coords_high:
                 high_level_blacklist.add(current_digits[r] + current_digits[c])
 
-    # 4. Bộ lọc ăn 1 lần rồi gãy (One-hit wonder)
+    # Lọc ăn 1 lần rồi gãy (One-hit wonder)
     one_hit_blacklist = set()
     for r in range(TOTAL_POS):
         for c in range(TOTAL_POS):
             if break_arr[r][c] > 0 and max_reached_arr[r][c] < 2:
                 one_hit_blacklist.add(current_digits[r] + current_digits[c])
 
-    # Bộ lọc cơ bản
+    # Bộ lọc cơ bản ngoài đời
     gan_blacklist = [n for n, days in db['gan_tracker'].items() if days > 12]
     bet_blacklist = [n for n, streak in db['bet_tracker'].items() if streak >= 2]
     bottom_20 = [item[0] for item in sorted(db['total_hits'].items(), key=lambda x: (x[1], int(x[0])))[:20]]
@@ -163,7 +163,7 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
                 if len(final_4) >= 4: break
             if len(final_4) >= 4: break
             
-    # AI TRÍCH XUẤT BẠCH THỦ
+    # AI TRÍCH XUẤT BẠCH THỦ TRONG TAM THỦ
     tam_thu = final_4[:3]
     if tam_thu:
         bt_scores = {}
@@ -199,32 +199,31 @@ def process_matrix(current_digits, current_loto, gdb_val):
     over_1d_arr = np.array(db["over_1d_matrix"], dtype=int)
     deep_break_arr = np.array(db["deep_break_matrix"], dtype=int)
     
-    # --- ĐỐI SOÁT LỊCH SỬ KÈM CỘT BẠCH THỦ ĐỘC LẬP ---
+    # --- ĐỐI SOÁT LỊCH SỬ CHUẨN 4 TẦNG BIỂU TƯỢNG (WIN/LOSS) ---
     hit_report = {"STT": len(db['history']) + 1, "GĐB": gdb_val}
-    
-    # Ghi nhận con Bạch Thủ của kỳ trước vào lịch sử đối soát kỳ này
     hit_report["Bạch Thủ"] = old_bt if old_bt else "Trống"
     
     if old_core_4:
         old_tam_thu = old_core_4[:3]
         found_3 = [n for n in old_tam_thu if n in current_loto]
         count_3 = sum([current_loto.count(n) for n in found_3])
-        hit_report["Dàn 3q"] = f"{count_3} ({','.join(found_3) if found_3 else '0'})"
         
         found_4 = [n for n in old_core_4 if n in current_loto]
         count_4 = sum([current_loto.count(n) for n in found_4])
+        
+        hit_report["Dàn 3q"] = f"{count_3} ({','.join(found_3) if found_3 else '0'})"
         hit_report["Dàn 4q"] = f"{count_4} ({','.join(found_4) if found_4 else '0'})"
         
-        # Đánh giá kết quả
+        # LOGIC ĐỐI SOÁT PHÂN TÁCH 4 TẦNG CHÍNH XÁC THEO Ý MÀY
         if old_bt and old_bt in current_loto:
-            hit_report["Result"] = "🔥 CHÚT BT 🔥" # Trúng thẳng con Bạch Thủ AI
+            hit_report["Result"] = "🔥 Win BT 🔥"    # 1. Trúng thẳng Bạch Thủ AI
         elif count_3 >= 1 or gdb_val in old_tam_thu:
-            hit_report["Result"] = "Win 🔥"
+            hit_report["Result"] = "🎯 Win Tam Thủ"  # 2. Trúng lót thuộc dàn Tam Thủ
         elif count_4 >= 1:
-            hit_report["Result"] = "✅"
+            hit_report["Result"] = "✅ Ăn Lót"       # 3. Tam thủ trượt hoàn toàn nhưng ăn con thứ 4
         else:
-            hit_report["Result"] = "❌"
-
+            hit_report["Result"] = "❌ Loss"         # 4. Trượt hoàn toàn sạch bảng
+            
     if len(old_digits) == TOTAL_POS:
         for i in range(TOTAL_POS):
             for j in range(TOTAL_POS):
@@ -249,8 +248,8 @@ def process_matrix(current_digits, current_loto, gdb_val):
     db['core_four'] = get_filtered_power_score_4(new_wire_scores, current_digits)
     db['history'].insert(0, hit_report)
 
-# --- 3. GIAO DIỆN SIÊU SẠCH CHO MOBILE ---
-st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MASTER V9.6.5</h2>", unsafe_allow_html=True)
+# --- 3. GIAO DIỆN SIÊU TỐI GIẢN CHO MOBILE ---
+st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MASTER V9.7.5</h2>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 💾 DATA SYSTEM")
@@ -260,7 +259,7 @@ with st.sidebar:
         check_and_fix_db_structure()
         st.rerun()
     if st.session_state['db']['last_digits']:
-        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_v965.json")
+        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_v975.json")
     
     st.divider()
     st.markdown("### 📸 OCR CAMERA")
@@ -284,7 +283,7 @@ with st.sidebar:
             st.rerun()
     st.button("🚨 XÓA BẢNG TẠM", on_click=lambda: st.session_state.clear())
 
-# --- HIỂN THỊ KẾT QUẢ DỰ ĐOÁN ---
+# --- BẢNG 1: HIỂN THỊ KẾT QUẢ DỰ ĐOÁN KỲ TIẾP THEO ---
 st.markdown("<h3><font color='#FF1E27'><b>🎯 TỌA ĐỘ PHÁT LỰC</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
@@ -292,7 +291,7 @@ c4 = st.session_state['db'].get('core_four', [])
 bt = st.session_state['db'].get('bach_thu', "")
 
 if c4:
-    # 1. Khung Bạch Thủ AI (Cỡ chữ 11vw gọn đẹp)
+    # 1. Hộp số Bạch Thủ AI
     if bt:
         st.markdown(f"""
             <div class="mobile-box-bt">
@@ -301,7 +300,7 @@ if c4:
             </div>
             """, unsafe_allow_html=True)
             
-    # 2. Khung Tam Thủ Chủ Lực (Cỡ chữ 8.5vw gọn đẹp)
+    # 2. Hộp số Tam Thủ Chủ Lực
     tam_thu_str = ' - '.join(c4[:3])
     st.markdown(f"""
         <div class="mobile-box-3">
@@ -310,7 +309,7 @@ if c4:
         </div>
         """, unsafe_allow_html=True)
 
-    # 3. Khung Tứ Thủ Chiến Thuật (Cỡ chữ 6.5vw gọn đẹp)
+    # 3. Hộp số Tứ Thủ Chiến Thuật
     tu_thu_str = ' - '.join(c4)
     st.markdown(f"""
         <div class="mobile-box-4">
@@ -321,7 +320,7 @@ if c4:
 else:
     st.info("Đang chờ tích lũy xung nhịp kỳ kế tiếp.")
 
-# --- BẢNG LỊCH SỬ ĐỐI SOÁT SIÊU SẠCH (ĐÃ THÊM CỘT BẠCH THỦ) ---
+# --- BẢNG 2: BẢNG LỊCH SỬ ĐỐI SOÁT HỆ WIN/LOSS MỚI ---
 st.markdown("<h3><font color='#FF1E27'><b>📋 LỊCH SỬ ĐỐI SOÁT KẾT QUẢ</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
@@ -335,14 +334,15 @@ if st.session_state['db']['history']:
     if "Result" in df_hist.columns:
         st.dataframe(
             df_hist[cols].style.map(
-                lambda x: 'color: #FF1E27; font-weight: 900' if x == "🔥 CHÚT BT 🔥" else 
-                          ('color: #F59E0B; font-weight: bold' if x == "Win 🔥" else 
-                          ('color: #10B981' if x == "✅" else ('color: #EF4444' if x == "❌" else ''))),
+                lambda x: 'color: #FF1E27; font-weight: 900' if x == "🔥 Win BT 🔥" else 
+                          ('color: #F59E0B; font-weight: bold' if x == "🎯 Win Tam Thủ" else 
+                          ('color: #10B981; font-weight: bold' if x == "✅ Ăn Lót" else 
+                          ('color: #718096' if x == "❌ Loss" else ''))),
                 subset=["Result"]
             ),
-            use_container_width=True, height=500
+            use_container_width=True, height=550
         )
     else:
-        st.dataframe(df_hist[cols], use_container_width=True, height=500)
+        st.dataframe(df_hist[cols], use_container_width=True, height=550)
 else:
     st.dataframe(pd.DataFrame(columns=["Result", "Bạch Thủ", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]), use_container_width=True, height=150)

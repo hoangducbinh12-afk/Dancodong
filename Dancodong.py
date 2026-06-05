@@ -6,21 +6,25 @@ import easyocr
 from PIL import Image
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Matrix V9.5.5 - Absolute Wire Filter", layout="wide")
+st.set_page_config(page_title="Matrix V9.6.5 - Ultimate Clean Mobile", layout="wide")
 TOTAL_POS = 107 
 
+# Custom CSS tối giản, giảm cỡ chữ vừa vặn Mobile chống che màn hình
 st.markdown("""
     <style>
     .main { background-color: #0A0D14; padding: 10px; }
     .stButton>button { width: 100%; border-radius: 6px; height: 3.5em; background-color: #161B26; color: #F0F4F8; border: 1px solid #2D3748; font-weight: bold; }
     .stButton>button:hover { border-color: #FFD700; color: #FFD700; }
-    .stExpander { border: 1px solid #1E293B; background-color: #0A0D14; border-radius: 8px; }
     
-    .mobile-box-3 { background-color: #030508; padding: 12px 5px; border-radius: 12px; text-align: center; border: 3px solid #2563EB; margin-bottom: 12px; overflow: hidden; }
-    .mobile-box-4 { background-color: #030508; padding: 12px 5px; border-radius: 12px; text-align: center; border: 3px solid #D97706; margin-bottom: 15px; overflow: hidden; }
+    /* Thiết kế hộp chứa nhỏ gọn, sang trọng */
+    .mobile-box-bt { background-color: #05070B; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #EF4444; margin-bottom: 12px; overflow: hidden; box-shadow: 0px 4px 15px rgba(239,68,68,0.2); }
+    .mobile-box-3 { background-color: #030508; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #2563EB; margin-bottom: 12px; overflow: hidden; }
+    .mobile-box-4 { background-color: #030508; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #D97706; margin-bottom: 15px; overflow: hidden; }
     
-    .mobile-text-3 { color: #FF1E27 !important; font-size: 10vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
-    .mobile-text-4 { color: #FFD700 !important; font-size: 8vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
+    /* Kích thước chữ tỷ lệ vàng Mobile không bị rớt dòng */
+    .mobile-text-bt { color: #FF1E27 !important; font-size: 11vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 2px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
+    .mobile-text-3 { color: #FF1E27 !important; font-size: 8.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
+    .mobile-text-4 { color: #FFD700 !important; font-size: 6.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -30,11 +34,13 @@ if 'db' not in st.session_state:
         "break_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
         "max_reached_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
         "over_1d_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
+        "deep_break_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
         "last_digits": "",
         "last_loto": [],
         "history": [],
         "last_predictions": {},
         "core_four": [],
+        "bach_thu": "",
         "gan_tracker": {str(i).zfill(2): 0 for i in range(100)},
         "bet_tracker": {str(i).zfill(2): 0 for i in range(100)},
         "total_hits": {str(i).zfill(2): 0 for i in range(100)}
@@ -52,6 +58,7 @@ def check_and_fix_db_structure():
     if "break_matrix" not in db: db["break_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
     if "max_reached_matrix" not in db: db["max_reached_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
     if "over_1d_matrix" not in db: db["over_1d_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
+    if "deep_break_matrix" not in db: db["deep_break_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
 
 def update_statistics(current_loto):
     check_and_fix_db_structure()
@@ -66,6 +73,8 @@ def update_statistics(current_loto):
             db['gan_tracker'][num] += 1
             db['bet_tracker'][num] = 0
 
+# --- 2. THUẬT TOÁN MA TRẬN CHẠY NGẦM ---
+
 def get_filtered_power_score_4(new_wire_scores, current_digits):
     check_and_fix_db_structure()
     db = st.session_state['db']
@@ -76,60 +85,60 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
         num = current_digits[r] + current_digits[c]
         mapping_1d[num] += 1
 
-    # --- SỬA LỖI LOGIC GỐC: TÌM 20 SỢI DÂY GÃY NHIỀU NHẤT LỊCH SỬ ---
+    # 1. Bộ lọc tỷ lệ % đứt gãy lịch sử
     break_arr = np.array(db["break_matrix"])
+    max_reached_arr = np.array(db["max_reached_matrix"])
+    over_1d_arr = np.array(db["over_1d_matrix"])
+    
     flat_wires = []
     for r in range(TOTAL_POS):
         for c in range(TOTAL_POS):
             if break_arr[r][c] > 0:
                 flat_wires.append(((r, c), int(break_arr[r][c])))
-    
-    # Sắp xếp tìm ra 20 cặp tọa độ dây đứt nhiều nhất
+                
     sorted_flat_wires = sorted(flat_wires, key=lambda x: x[1], reverse=True)
     top_20_dead_wires = [item[0] for item in sorted_flat_wires[:20]]
     
-    # Đưa các con số do 20 dây tử thần này ánh xạ ở kỳ hiện tại vào danh sách ĐEN KHÓA CHẾT
     dead_wire_blacklist = set()
     for r, c in top_20_dead_wires:
         dead_wire_blacklist.add(current_digits[r] + current_digits[c])
 
-    # Bộ lọc ăn 1 lần rồi gãy vĩnh viễn
-    max_reached_arr = np.array(db["max_reached_matrix"])
+    # 2. Bộ lọc cầu sập hầm
+    deep_break_arr = np.array(db["deep_break_matrix"])
+    deep_break_blacklist = set()
+    for r in range(TOTAL_POS):
+        for c in range(TOTAL_POS):
+            if deep_break_arr[r][c] >= 2:
+                deep_break_blacklist.add(current_digits[r] + current_digits[c])
+
+    # 3. Bộ lọc chặn dây thông >= 5đ
+    high_level_blacklist = set()
+    max_s = int(new_wire_scores.max())
+    if max_s >= 5:
+        for s in range(5, max_s + 1):
+            coords_high = np.argwhere(new_wire_scores == s)
+            for r, c in coords_high:
+                high_level_blacklist.add(current_digits[r] + current_digits[c])
+
+    # 4. Bộ lọc ăn 1 lần rồi gãy (One-hit wonder)
     one_hit_blacklist = set()
     for r in range(TOTAL_POS):
         for c in range(TOTAL_POS):
             if break_arr[r][c] > 0 and max_reached_arr[r][c] < 2:
                 one_hit_blacklist.add(current_digits[r] + current_digits[c])
 
-    # Bộ lọc cầu nghẹn hiệu suất thấp
-    over_1d_arr = np.array(db["over_1d_matrix"])
-    num_over_counts = {}
-    for r in range(TOTAL_POS):
-        for c in range(TOTAL_POS):
-            n = current_digits[r] + current_digits[c]
-            if max_reached_arr[r][c] > 0:
-                num_over_counts[n] = num_over_counts.get(n, 0) + over_1d_arr[r][c]
-                
-    ghost_20_wires = []
-    if num_over_counts:
-        sorted_overs = sorted(num_over_counts.items(), key=lambda x: x[1])
-        ghost_20_wires = [item[0] for item in sorted_overs[:20]]
-
     # Bộ lọc cơ bản
     gan_blacklist = [n for n, days in db['gan_tracker'].items() if days > 12]
     bet_blacklist = [n for n, streak in db['bet_tracker'].items() if streak >= 2]
     bottom_20 = [item[0] for item in sorted(db['total_hits'].items(), key=lambda x: (x[1], int(x[0])))[:20]]
     
-    # Gom danh sách cấm linh hoạt (bảo vệ chống trống dàn)
-    soft_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + list(one_hit_blacklist) + ghost_20_wires)
+    soft_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + list(one_hit_blacklist))
     if len(soft_blacklist) > 90:
         soft_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + list(one_hit_blacklist))
         
-    # DANH SÁCH ĐEN KHÓA CHẾT TUYỆT ĐỐI (Dây đứt nhiều nhất bắt buộc phải giữ lại, cấm thả xích)
-    final_blacklist = soft_blacklist.union(dead_wire_blacklist)
+    final_blacklist = soft_blacklist.union(dead_wire_blacklist).union(deep_break_blacklist).union(high_level_blacklist)
 
     power_map = {str(i).zfill(2): 0 for i in range(100)}
-    max_s = int(new_wire_scores.max())
     for s in range(2, max_s + 1):
         coords = np.argwhere(new_wire_scores == s)
         for r, c in coords:
@@ -144,17 +153,34 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
     sorted_power = sorted(power_map.items(), key=lambda x: x[1], reverse=True)
     final_4 = [item[0] for item in sorted_power[:4] if item[1] > 0]
     
-    # Cơ chế Fallback an toàn (Vẫn giữ nguyên lệnh khóa chết dây tử thần)
     if len(final_4) < 4:
         for s in range(max_s, -1, -1):
             coords = np.argwhere(new_wire_scores == s)
             for r, c in coords:
                 num = current_digits[r] + current_digits[c]
-                if num not in final_4 and num not in dead_wire_blacklist:
+                if num not in final_4 and num not in high_level_blacklist and num not in gan_blacklist:
                     final_4.append(num)
                 if len(final_4) >= 4: break
             if len(final_4) >= 4: break
             
+    # AI TRÍCH XUẤT BẠCH THỦ
+    tam_thu = final_4[:3]
+    if tam_thu:
+        bt_scores = {}
+        for num in tam_thu:
+            score_ai = 100
+            for r in range(TOTAL_POS):
+                for c in range(TOTAL_POS):
+                    if current_digits[r] + current_digits[c] == num:
+                        score_ai -= break_arr[r][c] * 2
+                        score_ai += over_1d_arr[r][c] * 3
+            if 5 <= mapping_1d[num] <= 15: score_ai += 25
+            if db['bet_tracker'][num] == 0: score_ai += 15
+            bt_scores[num] = score_ai
+        db['bach_thu'] = max(bt_scores, key=bt_scores.get)
+    else:
+        db['bach_thu'] = ""
+        
     return final_4[:4]
 
 def process_matrix(current_digits, current_loto, gdb_val):
@@ -165,13 +191,20 @@ def process_matrix(current_digits, current_loto, gdb_val):
     old_scores = np.array(db['wire_scores'], dtype=int)
     old_digits = db['last_digits']
     old_core_4 = db.get('core_four', [])
+    old_bt = db.get('bach_thu', "")
     
     new_wire_scores = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int)
     break_arr = np.array(db["break_matrix"], dtype=int)
     max_reached_arr = np.array(db["max_reached_matrix"], dtype=int)
     over_1d_arr = np.array(db["over_1d_matrix"], dtype=int)
+    deep_break_arr = np.array(db["deep_break_matrix"], dtype=int)
     
+    # --- ĐỐI SOÁT LỊCH SỬ KÈM CỘT BẠCH THỦ ĐỘC LẬP ---
     hit_report = {"STT": len(db['history']) + 1, "GĐB": gdb_val}
+    
+    # Ghi nhận con Bạch Thủ của kỳ trước vào lịch sử đối soát kỳ này
+    hit_report["Bạch Thủ"] = old_bt if old_bt else "Trống"
+    
     if old_core_4:
         old_tam_thu = old_core_4[:3]
         found_3 = [n for n in old_tam_thu if n in current_loto]
@@ -181,7 +214,16 @@ def process_matrix(current_digits, current_loto, gdb_val):
         found_4 = [n for n in old_core_4 if n in current_loto]
         count_4 = sum([current_loto.count(n) for n in found_4])
         hit_report["Dàn 4q"] = f"{count_4} ({','.join(found_4) if found_4 else '0'})"
-        hit_report["Kết quả"] = "Win 🔥" if (count_3 >= 1 or gdb_val in old_tam_thu) else ("✅" if count_4 >= 1 else "❌")
+        
+        # Đánh giá kết quả
+        if old_bt and old_bt in current_loto:
+            hit_report["Result"] = "🔥 CHÚT BT 🔥" # Trúng thẳng con Bạch Thủ AI
+        elif count_3 >= 1 or gdb_val in old_tam_thu:
+            hit_report["Result"] = "Win 🔥"
+        elif count_4 >= 1:
+            hit_report["Result"] = "✅"
+        else:
+            hit_report["Result"] = "❌"
 
     if len(old_digits) == TOTAL_POS:
         for i in range(TOTAL_POS):
@@ -192,46 +234,37 @@ def process_matrix(current_digits, current_loto, gdb_val):
                     if new_wire_scores[i][j] > max_reached_arr[i][j]: max_reached_arr[i][j] = new_wire_scores[i][j]
                     if new_wire_scores[i][j] >= 2: over_1d_arr[i][j] += 1
                 else:
-                    if old_scores[i][j] >= 1: break_arr[i][j] += 1
+                    if old_scores[i][j] >= 1: 
+                        break_arr[i][j] += 1
+                        if old_scores[i][j] >= 2: deep_break_arr[i][j] += 1
                     new_wire_scores[i][j] = 0
-
-    new_preds = {}
-    max_s = int(new_wire_scores.max())
-    if max_s > 0:
-        for s in range(1, max_s + 1):
-            coords = np.argwhere(new_wire_scores == s)
-            if len(coords) == 0: continue
-            level_map = {}
-            for r, c in coords:
-                level_map[current_digits[r] + current_digits[c]] = level_map.get(current_digits[r] + current_digits[c], 0) + 1
-            new_preds[int(s)] = {"nums": sorted([n for n, count in level_map.items() if count == 1]), "total_wires": int(len(coords))}
 
     db['wire_scores'] = new_wire_scores.tolist()
     db['break_matrix'] = break_arr.tolist()
     db['max_reached_matrix'] = max_reached_arr.tolist()
     db['over_1d_matrix'] = over_1d_arr.tolist()
+    db['deep_break_matrix'] = deep_break_arr.tolist()
     db['last_digits'] = current_digits
     db['last_loto'] = current_loto
-    db['last_predictions'] = new_preds
     db['core_four'] = get_filtered_power_score_4(new_wire_scores, current_digits)
     db['history'].insert(0, hit_report)
 
-# --- 3. GIAO DIỆN CHÍNH MOBILE ---
-st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MOBILE V9.5.5</h2>", unsafe_allow_html=True)
+# --- 3. GIAO DIỆN SIÊU SẠCH CHO MOBILE ---
+st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MASTER V9.6.5</h2>", unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("### 💾 HỆ THỐNG DATA")
+    st.markdown("### 💾 DATA SYSTEM")
     uploaded_file = st.file_uploader("Nạp JSON", type=['json'])
     if uploaded_file and st.button("📥 PHỤC HỒI MA TRẬN"):
         st.session_state['db'] = json.load(uploaded_file)
         check_and_fix_db_structure()
         st.rerun()
     if st.session_state['db']['last_digits']:
-        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_mobile.json")
+        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_v965.json")
     
     st.divider()
-    st.markdown("### 📸 OCR KQ")
-    uploaded_img = st.file_uploader("Quét ảnh", type=['jpg', 'png', 'jpeg'])
+    st.markdown("### 📸 OCR CAMERA")
+    uploaded_img = st.file_uploader("Chọn ảnh kết quả", type=['jpg', 'png', 'jpeg'])
     if uploaded_img and st.button("QUÉT ẢNH"):
         reader = load_ocr()
         res = reader.readtext(np.array(Image.open(uploaded_img)), detail=0)
@@ -251,11 +284,24 @@ with st.sidebar:
             st.rerun()
     st.button("🚨 XÓA BẢNG TẠM", on_click=lambda: st.session_state.clear())
 
+# --- HIỂN THỊ KẾT QUẢ DỰ ĐOÁN ---
 st.markdown("<h3><font color='#FF1E27'><b>🎯 TỌA ĐỘ PHÁT LỰC</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 c4 = st.session_state['db'].get('core_four', [])
+bt = st.session_state['db'].get('bach_thu', "")
+
 if c4:
+    # 1. Khung Bạch Thủ AI (Cỡ chữ 11vw gọn đẹp)
+    if bt:
+        st.markdown(f"""
+            <div class="mobile-box-bt">
+                <span style="color: #FF5555; font-size: 12px; font-weight: bold; font-family: sans-serif;">👑 BẠCH THỦ ASSASSIN AI</span><br>
+                <p class="mobile-text-bt"><b>{bt}</b></p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    # 2. Khung Tam Thủ Chủ Lực (Cỡ chữ 8.5vw gọn đẹp)
     tam_thu_str = ' - '.join(c4[:3])
     st.markdown(f"""
         <div class="mobile-box-3">
@@ -264,6 +310,7 @@ if c4:
         </div>
         """, unsafe_allow_html=True)
 
+    # 3. Khung Tứ Thủ Chiến Thuật (Cỡ chữ 6.5vw gọn đẹp)
     tu_thu_str = ' - '.join(c4)
     st.markdown(f"""
         <div class="mobile-box-4">
@@ -274,42 +321,28 @@ if c4:
 else:
     st.info("Đang chờ tích lũy xung nhịp kỳ kế tiếp.")
 
-check_and_fix_db_structure()
-with st.expander("🚫 Hệ thống chặn số tự động"):
-    gan_list = [n for n, days in st.session_state['db']['gan_tracker'].items() if days > 12]
-    bet_list = [n for n, streak in st.session_state['db']['bet_tracker'].items() if streak >= 2]
-    st.write(f"**Lô Gan (>12 ngày):** {', '.join(gan_list) if gan_list else 'Trống'}")
-    st.write(f"**Lô Bệt (>=2 ngày):** {', '.join(bet_list) if bet_list else 'Trống'}")
-
-st.markdown("<h3><font color='#FF1E27'><b>📊 ĐIỂM SỐ SỢI DÂY</b></font></h3>", unsafe_allow_html=True)
-st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
-
-preds = st.session_state['db'].get('last_predictions', {})
-if preds:
-    for lv in sorted([int(k) for k in preds.keys()], reverse=True):
-        data = preds[str(lv)] if str(lv) in preds else preds[lv]
-        with st.expander(f"Mức {lv}đ ({len(data['nums'])} quân)"): st.code(", ".join(data['nums']))
-
+# --- BẢNG LỊCH SỬ ĐỐI SOÁT SIÊU SẠCH (ĐÃ THÊM CỘT BẠCH THỦ) ---
 st.markdown("<h3><font color='#FF1E27'><b>📋 LỊCH SỬ ĐỐI SOÁT KẾT QUẢ</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 if st.session_state['db']['history']:
     df_hist = pd.DataFrame(st.session_state['db']['history']).fillna("0")
     cols = list(df_hist.columns)
-    important = ["Kết quả", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]
+    important = ["Result", "Bạch Thủ", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]
     for col in reversed(important):
         if col in cols: cols.insert(0, cols.pop(cols.index(col)))
     
-    if "Kết quả" in df_hist.columns:
+    if "Result" in df_hist.columns:
         st.dataframe(
             df_hist[cols].style.map(
-                lambda x: 'color: #F59E0B; font-weight: bold' if x == "Win 🔥" else 
-                          ('color: #10B981' if x == "✅" else ('color: #EF4444' if x == "❌" else '')),
-                subset=["Kết quả"]
+                lambda x: 'color: #FF1E27; font-weight: 900' if x == "🔥 CHÚT BT 🔥" else 
+                          ('color: #F59E0B; font-weight: bold' if x == "Win 🔥" else 
+                          ('color: #10B981' if x == "✅" else ('color: #EF4444' if x == "❌" else ''))),
+                subset=["Result"]
             ),
-            use_container_width=True, height=400
+            use_container_width=True, height=500
         )
     else:
-        st.dataframe(df_hist[cols], use_container_width=True, height=400)
+        st.dataframe(df_hist[cols], use_container_width=True, height=500)
 else:
-    st.dataframe(pd.DataFrame(columns=["Kết quả", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]), use_container_width=True, height=150)
+    st.dataframe(pd.DataFrame(columns=["Result", "Bạch Thủ", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]), use_container_width=True, height=150)

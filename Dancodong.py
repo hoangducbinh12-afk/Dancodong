@@ -6,9 +6,10 @@ import easyocr
 from PIL import Image
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Matrix V9.5.1 - Ghost Wire Filter", layout="wide")
+st.set_page_config(page_title="Matrix V9.5.2 - Mobile Sniper", layout="wide")
 TOTAL_POS = 107 
 
+# Custom CSS khóa chết giao diện tối, ép số trên 1 hàng duy nhất cho Mobile
 st.markdown("""
     <style>
     .main { background-color: #0A0D14; padding: 10px; }
@@ -16,9 +17,11 @@ st.markdown("""
     .stButton>button:hover { border-color: #FFD700; color: #FFD700; }
     .stExpander { border: 1px solid #1E293B; background-color: #0A0D14; border-radius: 8px; }
     
+    /* Cấu hình khung nền đen sâu */
     .mobile-box-3 { background-color: #030508; padding: 12px 5px; border-radius: 12px; text-align: center; border: 3px solid #2563EB; margin-bottom: 12px; overflow: hidden; }
     .mobile-box-4 { background-color: #030508; padding: 12px 5px; border-radius: 12px; text-align: center; border: 3px solid #D97706; margin-bottom: 15px; overflow: hidden; }
     
+    /* Ép chữ số nằm gọn trên 1 hàng ngang, không rớt dòng */
     .mobile-text-3 { color: #FF1E27 !important; font-size: 10vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     .mobile-text-4 { color: #FFD700 !important; font-size: 8vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     </style>
@@ -29,7 +32,7 @@ if 'db' not in st.session_state:
         "wire_scores": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
         "break_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
         "max_reached_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
-        "over_1d_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(), # Theo dõi số lần vượt qua 1đ
+        "over_1d_matrix": np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist(),
         "last_digits": "",
         "last_loto": [],
         "history": [],
@@ -45,7 +48,7 @@ if 'raw_input' not in st.session_state: st.session_state['raw_input'] = ""
 def load_ocr():
     return easyocr.Reader(['en'])
 
-# --- 2. THUẬT TOÁN MA TRẬN NÂNG CẤP BỘ LỌC CẦU NGHẸN ---
+# --- 2. THUẬT TOÁN MA TRẬN VÀ BỘ LỌC CHẶN GIỮ NGUYÊN ---
 
 def check_and_fix_db_structure():
     db = st.session_state['db']
@@ -85,7 +88,7 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
         num = current_digits[r] + current_digits[c]
         mapping_1d[num] += 1
 
-    # --- BỘ LỌC TỬ THẦN CŨ ---
+    # Bộ lọc tử thần
     break_arr = np.array(db["break_matrix"])
     num_break_counts = {str(i).zfill(2): 0 for i in range(100)}
     for r in range(TOTAL_POS):
@@ -102,17 +105,15 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
             if break_arr[r][c] > 0 and max_reached_arr[r][c] < 2:
                 one_hit_blacklist.add(current_digits[r] + current_digits[c])
 
-    # --- BỘ LỌC MỚI KÍCH HOẠT: TRIỆT HẠ 20 SỐ TỪ CẦU NGHẸN HIỆU SUẤT THẤP ---
+    # Bộ lọc cầu nghẹn hiệu suất thấp
     over_1d_arr = np.array(db["over_1d_matrix"])
     num_over_counts = {str(i).zfill(2): 0 for i in range(100)}
     for r in range(TOTAL_POS):
         for c in range(TOTAL_POS):
             n = current_digits[r] + current_digits[c]
-            # Chỉ xét những dây đã từng đứt gãy hoặc phát sinh điểm (loại trừ dây chưa bao giờ chạy)
             if max_reached_arr[r][c] > 0:
                 num_over_counts[n] += over_1d_arr[r][c]
                 
-    # Sắp xếp những con số có tổng số lần dây vượt qua 1đ ÍT NHẤT trong lịch sử
     sorted_overs = sorted(num_over_counts.items(), key=lambda x: x[1])
     ghost_20_wires = [item[0] for item in sorted_overs[:20]]
 
@@ -122,7 +123,6 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
     sorted_hits = sorted(db['total_hits'].items(), key=lambda x: (x[1], int(x[0])))
     bottom_20 = [item[0] for item in sorted_hits[:20]]
     
-    # Hợp nhất siêu danh sách đen
     final_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + death_20_breaks + list(one_hit_blacklist) + ghost_20_wires)
 
     power_map = {str(i).zfill(2): 0 for i in range(100)}
@@ -186,19 +186,14 @@ def process_matrix(current_digits, current_loto, gdb_val):
         else:
             hit_report["Kết quả"] = "❌"
 
-    # --- ĐỐI SOÁT VÀ GHI NHẬN ĐIỂM SỐ CẬP NHẬT MỚI ---
     if len(old_digits) == TOTAL_POS:
         for i in range(TOTAL_POS):
             for j in range(TOTAL_POS):
                 num_past = old_digits[i] + old_digits[j]
                 if num_past in current_loto:
                     new_wire_scores[i][j] = old_scores[i][j] + 1
-                    
-                    # Ghi nhận đỉnh điểm cao nhất lịch sử
                     if new_wire_scores[i][j] > max_reached_arr[i][j]:
                         max_reached_arr[i][j] = new_wire_scores[i][j]
-                        
-                    # LOGIC MỚI: Nếu dây đạt từ 2đ trở lên, cộng 1 điểm công trạng hiệu suất
                     if new_wire_scores[i][j] >= 2:
                         over_1d_arr[i][j] += 1
                 else:
@@ -222,15 +217,15 @@ def process_matrix(current_digits, current_loto, gdb_val):
     db['wire_scores'] = new_wire_scores.tolist()
     db['break_matrix'] = break_arr.tolist()
     db['max_reached_matrix'] = max_reached_arr.tolist()
-    db['over_1d_matrix'] = over_1d_arr.tolist() # Đồng bộ lưu trữ ma trận mới
+    db['over_1d_matrix'] = over_1d_arr.tolist()
     db['last_digits'] = current_digits
     db['last_loto'] = current_loto
     db['last_predictions'] = new_preds
     db['core_four'] = get_filtered_power_score_4(new_wire_scores, current_digits)
     db['history'].insert(0, hit_report)
 
-# --- 3. GIAO DIỆN CHÍNH TRỤC DỌC MOBILE ---
-st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MOBILE V9.5.1</h2>", unsafe_allow_html=True)
+# --- 3. GIAO DIỆN CHÍNH ---
+st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MOBILE V9.5.2</h2>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 💾 HỆ THỐNG DATA")
@@ -240,7 +235,7 @@ with st.sidebar:
         check_and_fix_db_structure()
         st.rerun()
     if st.session_state['db']['last_digits']:
-        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_v951.json")
+        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_mobile.json")
     
     st.divider()
     st.markdown("### 📸 OCR KQ")
@@ -307,7 +302,7 @@ if preds:
         with st.expander(f"Mức {lv}đ ({len(data['nums'])} quân)"):
             st.code(", ".join(data['nums']))
 
-# BẢNG LỊCH SỬ
+# BẢNG LỊCH SỬ DỰA TRÊN ĐIỀU KIỆN AN TOÀN CHỐNG LỖI KEYERROR
 st.markdown("<h3><font color='#FF1E27'><b>📋 LỊCH SỬ ĐỐI SOÁT KẾT QUẢ</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
@@ -318,12 +313,19 @@ if st.session_state['db']['history']:
     for col in reversed(important):
         if col in cols: cols.insert(0, cols.pop(cols.index(col)))
     
-    st.dataframe(
-        df_hist[cols].style.map(
-            lambda x: 'color: #F59E0B; font-weight: bold' if x == "Win 🔥" else 
-                      ('color: #10B981' if x == "✅" else ('color: #EF4444' if x == "❌" else '')),
-            subset=["Kết quả"]
-        ),
-        use_container_width=True,
-        height=400
-    )
+    # CHỈ TÔ MÀU KHI THỰC SỰ CÓ CỘT "KẾT QUẢ" ĐỂ KHÔNG BỊ VĂNG APP
+    if "Kết quả" in df_hist.columns:
+        st.dataframe(
+            df_hist[cols].style.map(
+                lambda x: 'color: #F59E0B; font-weight: bold' if x == "Win 🔥" else 
+                          ('color: #10B981' if x == "✅" else ('color: #EF4444' if x == "❌" else '')),
+                subset=["Kết quả"]
+            ),
+            use_container_width=True,
+            height=400
+        )
+    else:
+        st.dataframe(df_hist[cols], use_container_width=True, height=400)
+else:
+    # Nếu chưa có lịch sử, hiện bảng trống định dạng mẫu cho đẹp Mobile
+    st.dataframe(pd.DataFrame(columns=["Kết quả", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]), use_container_width=True, height=150)

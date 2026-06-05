@@ -6,7 +6,7 @@ import easyocr
 from PIL import Image
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Matrix V9.5.2 - Mobile Sniper", layout="wide")
+st.set_page_config(page_title="Matrix V9.5.4 - Sniper Core Master", layout="wide")
 TOTAL_POS = 107 
 
 # Custom CSS khóa chết giao diện tối, ép số trên 1 hàng duy nhất cho Mobile
@@ -17,11 +17,9 @@ st.markdown("""
     .stButton>button:hover { border-color: #FFD700; color: #FFD700; }
     .stExpander { border: 1px solid #1E293B; background-color: #0A0D14; border-radius: 8px; }
     
-    /* Cấu hình khung nền đen sâu */
     .mobile-box-3 { background-color: #030508; padding: 12px 5px; border-radius: 12px; text-align: center; border: 3px solid #2563EB; margin-bottom: 12px; overflow: hidden; }
     .mobile-box-4 { background-color: #030508; padding: 12px 5px; border-radius: 12px; text-align: center; border: 3px solid #D97706; margin-bottom: 15px; overflow: hidden; }
     
-    /* Ép chữ số nằm gọn trên 1 hàng ngang, không rớt dòng */
     .mobile-text-3 { color: #FF1E27 !important; font-size: 10vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     .mobile-text-4 { color: #FFD700 !important; font-size: 8vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     </style>
@@ -48,7 +46,7 @@ if 'raw_input' not in st.session_state: st.session_state['raw_input'] = ""
 def load_ocr():
     return easyocr.Reader(['en'])
 
-# --- 2. THUẬT TOÁN MA TRẬN VÀ BỘ LỌC CHẶN GIỮ NGUYÊN ---
+# --- 2. THUẬT TOÁN MA TRẬN VÀ CƠ CHẾ NỚI LỎG BỘ LỌC THÔNG MINH ---
 
 def check_and_fix_db_structure():
     db = st.session_state['db']
@@ -88,16 +86,17 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
         num = current_digits[r] + current_digits[c]
         mapping_1d[num] += 1
 
-    # Bộ lọc tử thần
+    # 1. Bộ lọc đứt gãy nhiều
     break_arr = np.array(db["break_matrix"])
     num_break_counts = {str(i).zfill(2): 0 for i in range(100)}
     for r in range(TOTAL_POS):
         for c in range(TOTAL_POS):
             n = current_digits[r] + current_digits[c]
             num_break_counts[n] += break_arr[r][c]
-    sorted_breaks = sorted(num_break_counts.items(), key=lambda x: x[1], reverse=True)
-    death_20_breaks = [item[0] for item in sorted_breaks[:20] if item[1] > 0]
+    sorted_breaks = sorted([item for item in num_break_counts.items() if item[1] > 0], key=lambda x: x[1], reverse=True)
+    death_20_breaks = [item[0] for item in sorted_breaks[:20]]
 
+    # 2. Bộ lọc ăn 1 lần rồi gãy vĩnh viễn
     max_reached_arr = np.array(db["max_reached_matrix"])
     one_hit_blacklist = set()
     for r in range(TOTAL_POS):
@@ -105,25 +104,33 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
             if break_arr[r][c] > 0 and max_reached_arr[r][c] < 2:
                 one_hit_blacklist.add(current_digits[r] + current_digits[c])
 
-    # Bộ lọc cầu nghẹn hiệu suất thấp
+    # 3. Bộ lọc cầu nghẹn hiệu suất thấp
     over_1d_arr = np.array(db["over_1d_matrix"])
-    num_over_counts = {str(i).zfill(2): 0 for i in range(100)}
+    num_over_counts = {}
     for r in range(TOTAL_POS):
         for c in range(TOTAL_POS):
             n = current_digits[r] + current_digits[c]
             if max_reached_arr[r][c] > 0:
-                num_over_counts[n] += over_1d_arr[r][c]
+                num_over_counts[n] = num_over_counts.get(n, 0) + over_1d_arr[r][c]
                 
-    sorted_overs = sorted(num_over_counts.items(), key=lambda x: x[1])
-    ghost_20_wires = [item[0] for item in sorted_overs[:20]]
+    ghost_20_wires = []
+    if num_over_counts:
+        sorted_overs = sorted(num_over_counts.items(), key=lambda x: x[1])
+        ghost_20_wires = [item[0] for item in sorted_overs[:20]]
 
-    # Bộ lọc cơ bản
+    # 4. Các bộ lọc cơ bản
     gan_blacklist = [n for n, days in db['gan_tracker'].items() if days > 12]
     bet_blacklist = [n for n, streak in db['bet_tracker'].items() if streak >= 2]
     sorted_hits = sorted(db['total_hits'].items(), key=lambda x: (x[1], int(x[0])))
     bottom_20 = [item[0] for item in sorted_hits[:20]]
     
+    # Gom danh sách cấm ban đầu
     final_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + death_20_breaks + list(one_hit_blacklist) + ghost_20_wires)
+
+    # --- CƠ CHẾ CỨU TRỢ CHỐNG TRỐNG DÀN ---
+    # Nếu danh sách cấm nuốt chửng gần hết (hơn 95 số), tự động thả xích bớt bộ lọc hiệu suất thấp và đứt gãy
+    if len(final_blacklist) > 95:
+        final_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + list(one_hit_blacklist))
 
     power_map = {str(i).zfill(2): 0 for i in range(100)}
     max_s = int(new_wire_scores.max())
@@ -141,13 +148,16 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
     sorted_power = sorted(power_map.items(), key=lambda x: x[1], reverse=True)
     final_4 = [item[0] for item in sorted_power[:4] if item[1] > 0]
     
+    # --- FALLBACK TOÀN DIỆN: Ép buộc phải bốc đủ quân khỏe nhất kể cả nằm trong blacklist nếu thiếu số ---
     if len(final_4) < 4:
-        for s in range(max_s, 0, -1):
+        for s in range(max_s, -1, -1):
             coords = np.argwhere(new_wire_scores == s)
             for r, c in coords:
                 num = current_digits[r] + current_digits[c]
-                if num not in final_4 and num not in final_blacklist:
-                    final_4.append(num)
+                if num not in final_4:
+                    # Ưu tiên lấy con nằm ngoài blacklist trước, nếu hết rồi thì lấy cả trong blacklist (trừ lô gan gắt)
+                    if num not in final_blacklist or num not in gan_blacklist:
+                        final_4.append(num)
                 if len(final_4) >= 4: break
             if len(final_4) >= 4: break
             
@@ -225,7 +235,7 @@ def process_matrix(current_digits, current_loto, gdb_val):
     db['history'].insert(0, hit_report)
 
 # --- 3. GIAO DIỆN CHÍNH ---
-st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MOBILE V9.5.2</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MOBILE V9.5.4</h2>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 💾 HỆ THỐNG DATA")
@@ -302,7 +312,7 @@ if preds:
         with st.expander(f"Mức {lv}đ ({len(data['nums'])} quân)"):
             st.code(", ".join(data['nums']))
 
-# BẢNG LỊCH SỬ DỰA TRÊN ĐIỀU KIỆN AN TOÀN CHỐNG LỖI KEYERROR
+# BẢNG LỊCH SỬ CHỐNG LỖI 
 st.markdown("<h3><font color='#FF1E27'><b>📋 LỊCH SỬ ĐỐI SOÁT KẾT QUẢ</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
@@ -313,7 +323,6 @@ if st.session_state['db']['history']:
     for col in reversed(important):
         if col in cols: cols.insert(0, cols.pop(cols.index(col)))
     
-    # CHỈ TÔ MÀU KHI THỰC SỰ CÓ CỘT "KẾT QUẢ" ĐỂ KHÔNG BỊ VĂNG APP
     if "Kết quả" in df_hist.columns:
         st.dataframe(
             df_hist[cols].style.map(
@@ -327,5 +336,4 @@ if st.session_state['db']['history']:
     else:
         st.dataframe(df_hist[cols], use_container_width=True, height=400)
 else:
-    # Nếu chưa có lịch sử, hiện bảng trống định dạng mẫu cho đẹp Mobile
     st.dataframe(pd.DataFrame(columns=["Kết quả", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]), use_container_width=True, height=150)

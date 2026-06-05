@@ -6,22 +6,30 @@ import easyocr
 from PIL import Image
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Matrix V9.9.5 - True AI Sniper", layout="wide")
+st.set_page_config(page_title="Matrix V10.0 - AI Core Master", layout="wide")
 TOTAL_POS = 107 
 
+# Custom CSS theo đúng yêu cầu: Tiêu đề TO LÊN - Số THU NHỎ LẠI chút chống ngợp
 st.markdown("""
     <style>
     .main { background-color: #0A0D14; padding: 10px; }
     .stButton>button { width: 100%; border-radius: 6px; height: 3.5em; background-color: #161B26; color: #F0F4F8; border: 1px solid #2D3748; font-weight: bold; }
     .stButton>button:hover { border-color: #FFD700; color: #FFD700; }
     
+    /* Thiết kế hộp chứa nhỏ gọn, chuyên nghiệp */
     .mobile-box-bt { background-color: #05070B; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #EF4444; margin-bottom: 12px; overflow: hidden; box-shadow: 0px 4px 15px rgba(239,68,68,0.2); }
     .mobile-box-3 { background-color: #030508; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #2563EB; margin-bottom: 12px; overflow: hidden; }
     .mobile-box-4 { background-color: #030508; padding: 10px 5px; border-radius: 12px; text-align: center; border: 3px solid #D97706; margin-bottom: 15px; overflow: hidden; }
     
-    .mobile-text-bt { color: #FF1E27 !important; font-size: 11vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 2px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
-    .mobile-text-3 { color: #FF1E27 !important; font-size: 8.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
-    .mobile-text-4 { color: #FFD700 !important; font-size: 6.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
+    /* Chữ tiêu đề TO LÊN và ĐẬM LÊN */
+    .title-text-bt { color: #FF5555 !important; font-size: 16px !important; font-weight: 900 !important; font-family: sans-serif; }
+    .title-text-3 { color: #94A3B8 !important; font-size: 15px !important; font-weight: 900 !important; font-family: sans-serif; }
+    .title-text-4 { color: #94A3B8 !important; font-size: 15px !important; font-weight: 900 !important; font-family: sans-serif; }
+    
+    /* Kích thước số THU NHỎ LẠI theo tỷ lệ vàng Mobile để cân đối */
+    .mobile-text-bt { color: #FF1E27 !important; font-size: 9.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 2px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
+    .mobile-text-3 { color: #FF1E27 !important; font-size: 7.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
+    .mobile-text-4 { color: #FFD700 !important; font-size: 5.5vw !important; font-weight: 900 !important; font-family: monospace; letter-spacing: 1px; margin: 0; line-height: 1.1; white-space: nowrap !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -68,7 +76,7 @@ def update_statistics(current_loto):
             db['gan_tracker'][num] += 1
             db['bet_tracker'][num] = 0
 
-# --- THUẬT TOÁN GỐC V9.4.7 KẾT HỢP NÃO BẠCH THỦ ĐỘC LẬP CHUẨN Ý MÀY ---
+# --- 2. GIỮ NGUYÊN 100% THUẬT TOÁN RA DÀN V9.4.7 - CHỈ CAN THIỆP CHỌN BT ---
 def get_filtered_power_score_4(new_wire_scores, current_digits):
     check_and_fix_db_structure()
     db = st.session_state['db']
@@ -118,33 +126,37 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
                 if len(final_4) >= 4: break
             if len(final_4) >= 4: break
             
-    # --- 🧠 ĐÂY MỚI LÀ AI BẠCH THỦ ĐỘC LẬP THỰC SỰ: KHÔNG MÁY MÓC LẤY SỐ ĐẦU ---
+    # --- 🧠 NÃO AI CẢI TIẾN V10.0: ƯU TIÊN ĐẶC BIỆT CHO CON NHIỀU ĐIỂM NHẤT ĐỨNG ĐẦU ---
     tam_thu = final_4[:3]
     if tam_thu:
         break_arr = np.array(db["break_matrix"])
         over_1d_arr = np.array(db["over_1d_matrix"])
         bt_scores = {}
         
+        # Con đứng đầu bảng điểm gốc (thằng nhiều điểm nhất của V9.4.7)
+        top_leader_num = tam_thu[0]
+        
         for num in tam_thu:
-            score_ai = 100 # Điểm sàn xuất phát của ứng viên Tam thủ
+            score_ai = 100 # Điểm sàn xuất phát
             
-            # 1. Đo độ sạch tọa độ chân rết cụ thể của sợi dây sinh ra số đó
+            # CỘNG ĐIỂM ƯU TIÊN ĐẶC BIỆT NẾU LÀ CON NHIỀU ĐIỂM NHẤT ĐỨNG ĐẦU BẢNG
+            if num == top_leader_num:
+                score_ai += 50.0  # Cộng thẳng 50đ quyền lực tối cao để bảo vệ xung nhịp nổ gốc
+            
+            # AI quét chấm thêm các chỉ số lịch sử chân rết dây độc lập
             for r in range(TOTAL_POS):
                 for c in range(TOTAL_POS):
                     if current_digits[r] + current_digits[c] == num:
-                        score_ai -= break_arr[r][c] * 2.5  # Phạt nặng dây đứt nhiều
-                        score_ai += over_1d_arr[r][c] * 3.5 # Thưởng đậm dây giữ hiệu suất tốt
+                        score_ai -= break_arr[r][c] * 2.5
+                        score_ai += over_1d_arr[r][c] * 3.5
             
-            # 2. Xét vùng nhiệt an toàn vệ tinh xung quanh
             if 5 <= mapping_1d[num] <= 15: score_ai += 30
             elif mapping_1d[num] > 30: score_ai -= 25
-            
-            # 3. Xét động lượng phong độ thực tế (Ưu tiên con số chín cầu kết thúc bệt)
             if db['bet_tracker'][num] == 0: score_ai += 20
             
             bt_scores[num] = score_ai
             
-        # AI bốc con có tổng điểm phân tích lịch sử dây tốt nhất làm Bạch Thủ, bất kể nó đứng thứ mấy!
+        # Chốt con cao điểm AI nhất làm Bạch Thủ (Ưu tiên con đứng đầu cực mạnh)
         db['bach_thu'] = max(bt_scores, key=bt_scores.get)
     else:
         db['bach_thu'] = ""
@@ -166,7 +178,6 @@ def process_matrix(current_digits, current_loto, gdb_val):
     max_reached_arr = np.array(db["max_reached_matrix"], dtype=int)
     over_1d_arr = np.array(db["over_1d_matrix"], dtype=int)
     
-    # --- ĐỐI SOÁT LỊCH SỬ CHUẨN 4 TẦNG BIỂU TƯỢNG (WIN/LOSS) ---
     hit_report = {"STT": len(db['history']) + 1, "GĐB": gdb_val}
     hit_report["Bạch Thủ"] = old_bt if old_bt else "Trống"
     
@@ -221,8 +232,8 @@ def process_matrix(current_digits, current_loto, gdb_val):
     db['core_four'] = get_filtered_power_score_4(new_wire_scores, current_digits)
     db['history'].insert(0, hit_report)
 
-# --- 3. GIAO DIỆN SIÊU TỐI GIẢN CHO MOBILE ---
-st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MASTER V9.9.5</h2>", unsafe_allow_html=True)
+# --- 3. GIAO DIỆN SIÊU TỐI GIẢN MOBILE V10.0 ---
+st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MASTER V10.0</h2>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 💾 DATA SYSTEM")
@@ -232,7 +243,7 @@ with st.sidebar:
         check_and_fix_db_structure()
         st.rerun()
     if st.session_state['db']['last_digits']:
-        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_v995.json")
+        st.download_button("💾 XUẤT FILE JSON", json.dumps(st.session_state['db']), "matrix_v100.json")
     
     st.divider()
     st.markdown("### 📸 OCR CAMERA")
@@ -265,11 +276,11 @@ bt = st.session_state['db'].get('bach_thu', "")
 
 if c4:
     if bt:
-        st.markdown(f"""<div class="mobile-box-bt"><span style="color: #FF5555; font-size: 12px; font-weight: bold;">👑 BẠCH THỦ ASSASSIN AI</span><br><p class="mobile-text-bt"><b>{bt}</b></p></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="mobile-box-bt"><span class="title-text-bt">👑 BẠCH THỦ ASSASSIN AI</span><br><p class="mobile-text-bt"><b>{bt}</b></p></div>""", unsafe_allow_html=True)
     tam_thu_str = ' - '.join(c4[:3])
-    st.markdown(f"""<div class="mobile-box-3"><span style="color: #94A3B8; font-size: 12px; font-weight: bold;">🔥 TAM THỦ CHỦ LỰC</span><br><p class="mobile-text-3"><b>{tam_thu_str}</b></p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="mobile-box-3"><span class="title-text-3">🔥 TAM THỦ CHỦ LỰC</span><br><p class="mobile-text-3"><b>{tam_thu_str}</b></p></div>""", unsafe_allow_html=True)
     tu_thu_str = ' - '.join(c4)
-    st.markdown(f"""<div class="mobile-box-4"><span style="color: #94A3B8; font-size: 12px; font-weight: bold;">🎯 TỨ THỦ CHIẾN THUẬT</span><br><p class="mobile-text-4"><b>{tu_thu_str}</b></p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="mobile-box-4"><span class="title-text-4">🎯 TỨ THỦ CHIẾN THUẬT</span><br><p class="mobile-text-4"><b>{tu_thu_str}</b></p></div>""", unsafe_allow_html=True)
 else:
     st.info("Đang chờ tích lũy xung nhịp kỳ kế tiếp.")
 
@@ -280,7 +291,7 @@ with st.expander("🚫 Hệ thống chặn số tự động"):
     st.write(f"**Lô Gan (>12 ngày):** {', '.join(gan_list) if gan_list else 'Trống'}")
     st.write(f"**Lô Bệt (>=2 ngày):** {', '.join(bet_list) if bet_list else 'Trống'}")
 
-# --- BẢNG 2: LỊCH SỬ ĐỐI SOÁT WIN/LOSS CHUẨN ---
+# --- BẢNG 2: LỊCH SỬ ĐỐI SOÁT WIN/LOSS ---
 st.markdown("<h3><font color='#FF1E27'><b>📋 LỊCH SỬ ĐỐI SOÁT KẾT QUẢ</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
@@ -302,7 +313,5 @@ if st.session_state['db']['history']:
             ),
             use_container_width=True, height=550
         )
-    else:
-        st.dataframe(df_hist[cols], use_container_width=True, height=550)
 else:
     st.dataframe(pd.DataFrame(columns=["Result", "Bạch Thủ", "Dàn 3q", "Dàn 4q", "GĐB", "STT"]), use_container_width=True, height=150)

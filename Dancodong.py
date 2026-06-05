@@ -6,10 +6,9 @@ import easyocr
 from PIL import Image
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Matrix V9.5.4 - Sniper Core Master", layout="wide")
+st.set_page_config(page_title="Matrix V9.5.5 - Absolute Wire Filter", layout="wide")
 TOTAL_POS = 107 
 
-# Custom CSS khóa chết giao diện tối, ép số trên 1 hàng duy nhất cho Mobile
 st.markdown("""
     <style>
     .main { background-color: #0A0D14; padding: 10px; }
@@ -46,22 +45,13 @@ if 'raw_input' not in st.session_state: st.session_state['raw_input'] = ""
 def load_ocr():
     return easyocr.Reader(['en'])
 
-# --- 2. THUẬT TOÁN MA TRẬN VÀ CƠ CHẾ NỚI LỎG BỘ LỌC THÔNG MINH ---
-
 def check_and_fix_db_structure():
     db = st.session_state['db']
-    if "gan_tracker" not in db or not db["gan_tracker"]:
-        db["gan_tracker"] = {str(i).zfill(2): 0 for i in range(100)}
-    if "bet_tracker" not in db or not db["bet_tracker"]:
-        db["bet_tracker"] = {str(i).zfill(2): 0 for i in range(100)}
-    if "total_hits" not in db or not db["total_hits"]:
-        db["total_hits"] = {str(i).zfill(2): 0 for i in range(100)}
-    if "break_matrix" not in db:
-        db["break_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
-    if "max_reached_matrix" not in db:
-        db["max_reached_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
-    if "over_1d_matrix" not in db:
-        db["over_1d_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
+    for key in ["gan_tracker", "bet_tracker", "total_hits"]:
+        if key not in db or not db[key]: db[key] = {str(i).zfill(2): 0 for i in range(100)}
+    if "break_matrix" not in db: db["break_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
+    if "max_reached_matrix" not in db: db["max_reached_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
+    if "over_1d_matrix" not in db: db["over_1d_matrix"] = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int).tolist()
 
 def update_statistics(current_loto):
     check_and_fix_db_structure()
@@ -86,17 +76,24 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
         num = current_digits[r] + current_digits[c]
         mapping_1d[num] += 1
 
-    # 1. Bộ lọc đứt gãy nhiều
+    # --- SỬA LỖI LOGIC GỐC: TÌM 20 SỢI DÂY GÃY NHIỀU NHẤT LỊCH SỬ ---
     break_arr = np.array(db["break_matrix"])
-    num_break_counts = {str(i).zfill(2): 0 for i in range(100)}
+    flat_wires = []
     for r in range(TOTAL_POS):
         for c in range(TOTAL_POS):
-            n = current_digits[r] + current_digits[c]
-            num_break_counts[n] += break_arr[r][c]
-    sorted_breaks = sorted([item for item in num_break_counts.items() if item[1] > 0], key=lambda x: x[1], reverse=True)
-    death_20_breaks = [item[0] for item in sorted_breaks[:20]]
+            if break_arr[r][c] > 0:
+                flat_wires.append(((r, c), int(break_arr[r][c])))
+    
+    # Sắp xếp tìm ra 20 cặp tọa độ dây đứt nhiều nhất
+    sorted_flat_wires = sorted(flat_wires, key=lambda x: x[1], reverse=True)
+    top_20_dead_wires = [item[0] for item in sorted_flat_wires[:20]]
+    
+    # Đưa các con số do 20 dây tử thần này ánh xạ ở kỳ hiện tại vào danh sách ĐEN KHÓA CHẾT
+    dead_wire_blacklist = set()
+    for r, c in top_20_dead_wires:
+        dead_wire_blacklist.add(current_digits[r] + current_digits[c])
 
-    # 2. Bộ lọc ăn 1 lần rồi gãy vĩnh viễn
+    # Bộ lọc ăn 1 lần rồi gãy vĩnh viễn
     max_reached_arr = np.array(db["max_reached_matrix"])
     one_hit_blacklist = set()
     for r in range(TOTAL_POS):
@@ -104,7 +101,7 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
             if break_arr[r][c] > 0 and max_reached_arr[r][c] < 2:
                 one_hit_blacklist.add(current_digits[r] + current_digits[c])
 
-    # 3. Bộ lọc cầu nghẹn hiệu suất thấp
+    # Bộ lọc cầu nghẹn hiệu suất thấp
     over_1d_arr = np.array(db["over_1d_matrix"])
     num_over_counts = {}
     for r in range(TOTAL_POS):
@@ -118,19 +115,18 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
         sorted_overs = sorted(num_over_counts.items(), key=lambda x: x[1])
         ghost_20_wires = [item[0] for item in sorted_overs[:20]]
 
-    # 4. Các bộ lọc cơ bản
+    # Bộ lọc cơ bản
     gan_blacklist = [n for n, days in db['gan_tracker'].items() if days > 12]
     bet_blacklist = [n for n, streak in db['bet_tracker'].items() if streak >= 2]
-    sorted_hits = sorted(db['total_hits'].items(), key=lambda x: (x[1], int(x[0])))
-    bottom_20 = [item[0] for item in sorted_hits[:20]]
+    bottom_20 = [item[0] for item in sorted(db['total_hits'].items(), key=lambda x: (x[1], int(x[0])))[:20]]
     
-    # Gom danh sách cấm ban đầu
-    final_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + death_20_breaks + list(one_hit_blacklist) + ghost_20_wires)
-
-    # --- CƠ CHẾ CỨU TRỢ CHỐNG TRỐNG DÀN ---
-    # Nếu danh sách cấm nuốt chửng gần hết (hơn 95 số), tự động thả xích bớt bộ lọc hiệu suất thấp và đứt gãy
-    if len(final_blacklist) > 95:
-        final_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + list(one_hit_blacklist))
+    # Gom danh sách cấm linh hoạt (bảo vệ chống trống dàn)
+    soft_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + list(one_hit_blacklist) + ghost_20_wires)
+    if len(soft_blacklist) > 90:
+        soft_blacklist = set(gan_blacklist + bet_blacklist + bottom_20 + list(one_hit_blacklist))
+        
+    # DANH SÁCH ĐEN KHÓA CHẾT TUYỆT ĐỐI (Dây đứt nhiều nhất bắt buộc phải giữ lại, cấm thả xích)
+    final_blacklist = soft_blacklist.union(dead_wire_blacklist)
 
     power_map = {str(i).zfill(2): 0 for i in range(100)}
     max_s = int(new_wire_scores.max())
@@ -148,16 +144,14 @@ def get_filtered_power_score_4(new_wire_scores, current_digits):
     sorted_power = sorted(power_map.items(), key=lambda x: x[1], reverse=True)
     final_4 = [item[0] for item in sorted_power[:4] if item[1] > 0]
     
-    # --- FALLBACK TOÀN DIỆN: Ép buộc phải bốc đủ quân khỏe nhất kể cả nằm trong blacklist nếu thiếu số ---
+    # Cơ chế Fallback an toàn (Vẫn giữ nguyên lệnh khóa chết dây tử thần)
     if len(final_4) < 4:
         for s in range(max_s, -1, -1):
             coords = np.argwhere(new_wire_scores == s)
             for r, c in coords:
                 num = current_digits[r] + current_digits[c]
-                if num not in final_4:
-                    # Ưu tiên lấy con nằm ngoài blacklist trước, nếu hết rồi thì lấy cả trong blacklist (trừ lô gan gắt)
-                    if num not in final_blacklist or num not in gan_blacklist:
-                        final_4.append(num)
+                if num not in final_4 and num not in dead_wire_blacklist:
+                    final_4.append(num)
                 if len(final_4) >= 4: break
             if len(final_4) >= 4: break
             
@@ -170,7 +164,6 @@ def process_matrix(current_digits, current_loto, gdb_val):
     
     old_scores = np.array(db['wire_scores'], dtype=int)
     old_digits = db['last_digits']
-    old_preds = db['last_predictions']
     old_core_4 = db.get('core_four', [])
     
     new_wire_scores = np.zeros((TOTAL_POS, TOTAL_POS), dtype=int)
@@ -188,13 +181,7 @@ def process_matrix(current_digits, current_loto, gdb_val):
         found_4 = [n for n in old_core_4 if n in current_loto]
         count_4 = sum([current_loto.count(n) for n in found_4])
         hit_report["Dàn 4q"] = f"{count_4} ({','.join(found_4) if found_4 else '0'})"
-        
-        if count_3 >= 1 or gdb_val in old_tam_thu:
-            hit_report["Kết quả"] = "Win 🔥"
-        elif count_4 >= 1:
-            hit_report["Kết quả"] = "✅"
-        else:
-            hit_report["Kết quả"] = "❌"
+        hit_report["Kết quả"] = "Win 🔥" if (count_3 >= 1 or gdb_val in old_tam_thu) else ("✅" if count_4 >= 1 else "❌")
 
     if len(old_digits) == TOTAL_POS:
         for i in range(TOTAL_POS):
@@ -202,13 +189,10 @@ def process_matrix(current_digits, current_loto, gdb_val):
                 num_past = old_digits[i] + old_digits[j]
                 if num_past in current_loto:
                     new_wire_scores[i][j] = old_scores[i][j] + 1
-                    if new_wire_scores[i][j] > max_reached_arr[i][j]:
-                        max_reached_arr[i][j] = new_wire_scores[i][j]
-                    if new_wire_scores[i][j] >= 2:
-                        over_1d_arr[i][j] += 1
+                    if new_wire_scores[i][j] > max_reached_arr[i][j]: max_reached_arr[i][j] = new_wire_scores[i][j]
+                    if new_wire_scores[i][j] >= 2: over_1d_arr[i][j] += 1
                 else:
-                    if old_scores[i][j] >= 1:
-                        break_arr[i][j] += 1
+                    if old_scores[i][j] >= 1: break_arr[i][j] += 1
                     new_wire_scores[i][j] = 0
 
     new_preds = {}
@@ -219,10 +203,8 @@ def process_matrix(current_digits, current_loto, gdb_val):
             if len(coords) == 0: continue
             level_map = {}
             for r, c in coords:
-                num = current_digits[r] + current_digits[c]
-                level_map[num] = level_map.get(num, 0) + 1
-            isolated = [n for n, count in level_map.items() if count == 1]
-            new_preds[int(s)] = {"nums": sorted(isolated), "total_wires": int(len(coords))}
+                level_map[current_digits[r] + current_digits[c]] = level_map.get(current_digits[r] + current_digits[c], 0) + 1
+            new_preds[int(s)] = {"nums": sorted([n for n, count in level_map.items() if count == 1]), "total_wires": int(len(coords))}
 
     db['wire_scores'] = new_wire_scores.tolist()
     db['break_matrix'] = break_arr.tolist()
@@ -234,8 +216,8 @@ def process_matrix(current_digits, current_loto, gdb_val):
     db['core_four'] = get_filtered_power_score_4(new_wire_scores, current_digits)
     db['history'].insert(0, hit_report)
 
-# --- 3. GIAO DIỆN CHÍNH ---
-st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MOBILE V9.5.4</h2>", unsafe_allow_html=True)
+# --- 3. GIAO DIỆN CHÍNH MOBILE ---
+st.markdown("<h2 style='text-align: center; color: #E2E8F0; font-weight: bold; font-size: 1.5rem;'>⚡ MATRIX MOBILE V9.5.5</h2>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 💾 HỆ THỐNG DATA")
@@ -269,7 +251,6 @@ with st.sidebar:
             st.rerun()
     st.button("🚨 XÓA BẢNG TẠM", on_click=lambda: st.session_state.clear())
 
-# --- HIỂN THỊ KẾT QUẢ ---
 st.markdown("<h3><font color='#FF1E27'><b>🎯 TỌA ĐỘ PHÁT LỰC</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
@@ -300,19 +281,15 @@ with st.expander("🚫 Hệ thống chặn số tự động"):
     st.write(f"**Lô Gan (>12 ngày):** {', '.join(gan_list) if gan_list else 'Trống'}")
     st.write(f"**Lô Bệt (>=2 ngày):** {', '.join(bet_list) if bet_list else 'Trống'}")
 
-# MỨC ĐIỂM DÂY
 st.markdown("<h3><font color='#FF1E27'><b>📊 ĐIỂM SỐ SỢI DÂY</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 preds = st.session_state['db'].get('last_predictions', {})
 if preds:
-    sorted_keys = sorted([int(k) for k in preds.keys()], reverse=True)
-    for lv in sorted_keys:
+    for lv in sorted([int(k) for k in preds.keys()], reverse=True):
         data = preds[str(lv)] if str(lv) in preds else preds[lv]
-        with st.expander(f"Mức {lv}đ ({len(data['nums'])} quân)"):
-            st.code(", ".join(data['nums']))
+        with st.expander(f"Mức {lv}đ ({len(data['nums'])} quân)"): st.code(", ".join(data['nums']))
 
-# BẢNG LỊCH SỬ CHỐNG LỖI 
 st.markdown("<h3><font color='#FF1E27'><b>📋 LỊCH SỬ ĐỐI SOÁT KẾT QUẢ</b></font></h3>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #FF1E27; margin-top: -5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
@@ -330,8 +307,7 @@ if st.session_state['db']['history']:
                           ('color: #10B981' if x == "✅" else ('color: #EF4444' if x == "❌" else '')),
                 subset=["Kết quả"]
             ),
-            use_container_width=True,
-            height=400
+            use_container_width=True, height=400
         )
     else:
         st.dataframe(df_hist[cols], use_container_width=True, height=400)
